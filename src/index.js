@@ -97,8 +97,16 @@ export default {
 
             // 输出结果
             for (const r of result.results) {
-                if (r.status === 'success') {
-                    console.log(`[${r.record_name}] 同步成功: +${r.changes.added.length} -${r.changes.deleted.length}`);
+                const v4Changes = (r.ipv4?.added?.length || 0) + (r.ipv4?.deleted?.length || 0);
+                const v6Changes = (r.ipv6?.added?.length || 0) + (r.ipv6?.deleted?.length || 0);
+
+                if (r.status === 'success' || r.status === 'partial') {
+                    let msg = `[${r.record_name}] 同步成功:`;
+                    if (r.ipv4?.added?.length) msg += ` +A(${r.ipv4.added.join(',')})`;
+                    if (r.ipv4?.deleted?.length) msg += ` -A(${r.ipv4.deleted.join(',')})`;
+                    if (r.ipv6?.added?.length) msg += ` +AAAA(${r.ipv6.added.join(',')})`;
+                    if (r.ipv6?.deleted?.length) msg += ` -AAAA(${r.ipv6.deleted.join(',')})`;
+                    console.log(msg);
                 } else if (r.status === 'unchanged') {
                     console.log(`[${r.record_name}] 无变化`);
                 } else {

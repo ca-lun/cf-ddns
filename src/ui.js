@@ -312,6 +312,35 @@ export function getHtml() {
     .log-result.error { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
     .log-result.warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
     
+    .log-result-detail {
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+    }
+    
+    .log-result-detail.success { background: rgba(34, 197, 94, 0.1); }
+    .log-result-detail.unchanged { background: rgba(148, 163, 184, 0.1); }
+    .log-result-detail.error { background: rgba(239, 68, 68, 0.1); }
+    .log-result-detail.warning { background: rgba(245, 158, 11, 0.1); }
+    .log-result-detail.partial { background: rgba(245, 158, 11, 0.1); }
+    
+    .ip-changes {
+      margin-top: 0.375rem;
+      font-size: 0.75rem;
+      font-family: monospace;
+    }
+    
+    .ip-change {
+      display: inline-block;
+      padding: 0.125rem 0.375rem;
+      margin: 0.125rem;
+      border-radius: 0.25rem;
+    }
+    
+    .ip-change.add { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+    .ip-change.del { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    
     .empty {
       text-align: center;
       color: var(--text-secondary);
@@ -405,6 +434,23 @@ export function getHtml() {
           </div>
         </div>
         
+        <div class="form-row">
+          <div class="form-group">
+            <label>IP 版本</label>
+            <div class="checkbox-group">
+              <input type="checkbox" id="enableIpv4" checked>
+              <label for="enableIpv4" style="margin: 0;">IPv4 (A)</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>&nbsp;</label>
+            <div class="checkbox-group">
+              <input type="checkbox" id="enableIpv6" checked>
+              <label for="enableIpv6" style="margin: 0;">IPv6 (AAAA)</label>
+            </div>
+          </div>
+        </div>
+        
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
           <button type="submit" class="btn btn-primary">保存</button>
@@ -443,7 +489,7 @@ export function getHtml() {
         <div class="config-item">
           <div class="config-info">
             <h3>\${c.record_name}</h3>
-            <div class="zone">Zone: \${c.zone_name || '自动识别'} · TTL: \${c.ttl || 60}s \${c.proxied ? '· 🟠 代理' : ''}</div>
+            <div class="zone">Zone: \${c.zone_name || '自动识别'} · TTL: \${c.ttl || 60}s \${c.proxied ? '· 🟠 代理' : ''} · \${c.enable_ipv4 !== false ? 'IPv4' : ''}\${c.enable_ipv4 !== false && c.enable_ipv6 !== false ? '+' : ''}\${c.enable_ipv6 !== false ? 'IPv6' : ''}</div>
             <div class="targets">
               \${c.targets.map(t => \`<span class="tag">\${t}</span>\`).join('')}
             </div>
@@ -482,7 +528,10 @@ export function getHtml() {
           </div>
           <div class="log-results">
             \${log.results.map(r => \`
-              <span class="log-result \${r.status}">\${r.record_name}: \${getStatusText(r)}</span>
+              <div class="log-result-detail \${r.status}">
+                <strong>\${r.record_name}</strong>: \${getStatusText(r)}
+                \${getChangeDetails(r)}
+              </div>
             \`).join('')}
           </div>
         </div>
@@ -490,11 +539,30 @@ export function getHtml() {
     }
     
     function getStatusText(r) {
-      if (r.status === 'success') return \`+\${r.changes.added.length} -\${r.changes.deleted.length}\`;
+      if (r.status === 'success' || r.status === 'partial') {
+        const v4add = r.ipv4?.added?.length || 0;
+        const v4del = r.ipv4?.deleted?.length || 0;
+        const v6add = r.ipv6?.added?.length || 0;
+        const v6del = r.ipv6?.deleted?.length || 0;
+        let parts = [];
+        if (v4add || v4del) parts.push(\`A: +\${v4add} -\${v4del}\`);
+        if (v6add || v6del) parts.push(\`AAAA: +\${v6add} -\${v6del}\`);
+        return parts.join(' | ') || '无变化';
+      }
       if (r.status === 'unchanged') return '无变化';
       if (r.status === 'error') return r.error || '错误';
       if (r.status === 'warning') return r.error || '警告';
       return r.status;
+    }
+    
+    function getChangeDetails(r) {
+      if (r.status !== 'success' && r.status !== 'partial') return '';
+      let details = [];
+      if (r.ipv4?.added?.length) details.push(\`<span class="ip-change add">+A: \${r.ipv4.added.join(', ')}</span>\`);
+      if (r.ipv4?.deleted?.length) details.push(\`<span class="ip-change del">-A: \${r.ipv4.deleted.join(', ')}</span>\`);
+      if (r.ipv6?.added?.length) details.push(\`<span class="ip-change add">+AAAA: \${r.ipv6.added.join(', ')}</span>\`);
+      if (r.ipv6?.deleted?.length) details.push(\`<span class="ip-change del">-AAAA: \${r.ipv6.deleted.join(', ')}</span>\`);
+      return details.length ? \`<div class="ip-changes">\${details.join('')}</div>\` : '';
     }
     
     function openModal(config = null) {
@@ -507,10 +575,14 @@ export function getHtml() {
         document.getElementById('targets').value = config.targets.join('\\n');
         document.getElementById('ttl').value = config.ttl || 60;
         document.getElementById('proxied').checked = config.proxied || false;
+        document.getElementById('enableIpv4').checked = config.enable_ipv4 !== false;
+        document.getElementById('enableIpv6').checked = config.enable_ipv6 !== false;
       } else {
         document.getElementById('configForm').reset();
         document.getElementById('configId').value = '';
         document.getElementById('ttl').value = 60;
+        document.getElementById('enableIpv4').checked = true;
+        document.getElementById('enableIpv6').checked = true;
       }
     }
     
@@ -532,7 +604,9 @@ export function getHtml() {
         record_name: document.getElementById('recordName').value.trim(),
         targets: document.getElementById('targets').value.trim().split('\\n').map(s => s.trim()).filter(s => s),
         ttl: parseInt(document.getElementById('ttl').value) || 60,
-        proxied: document.getElementById('proxied').checked
+        proxied: document.getElementById('proxied').checked,
+        enable_ipv4: document.getElementById('enableIpv4').checked,
+        enable_ipv6: document.getElementById('enableIpv6').checked
       };
       
       try {
