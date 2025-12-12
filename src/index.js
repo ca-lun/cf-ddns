@@ -6,12 +6,62 @@ import { handleApiRequest, getConfigs, saveSyncLog } from './api.js';
 import { syncAll } from './ddns.js';
 import { getHtml } from './ui.js';
 
+/**
+ * 检查 Basic 认证
+ * 如果未设置 AUTH_USERNAME 或 AUTH_PASSWORD，则跳过认证
+ */
+function checkBasicAuth(request, env) {
+    // 如果未配置认证信息，则不启用认证
+    if (!env.AUTH_USERNAME || !env.AUTH_PASSWORD) {
+        return { authorized: true };
+    }
+
+    const authHeader = request.headers.get('Authorization');
+
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return { authorized: false };
+    }
+
+    try {
+        const base64 = authHeader.slice(6);
+        const decoded = atob(base64);
+        const [username, password] = decoded.split(':');
+
+        if (username === env.AUTH_USERNAME && password === env.AUTH_PASSWORD) {
+            return { authorized: true };
+        }
+    } catch {
+        // 解码失败
+    }
+
+    return { authorized: false };
+}
+
+/**
+ * 返回 401 认证要求响应
+ */
+function unauthorizedResponse() {
+    return new Response('Unauthorized', {
+        status: 401,
+        headers: {
+            'WWW-Authenticate': 'Basic realm="DDNS Admin"',
+            'Content-Type': 'text/plain'
+        }
+    });
+}
+
 export default {
     /**
      * HTTP 请求处理
      */
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
+
+        // 检查 Basic 认证
+        const auth = checkBasicAuth(request, env);
+        if (!auth.authorized) {
+            return unauthorizedResponse();
+        }
 
         // API 请求
         if (url.pathname.startsWith('/api/')) {
