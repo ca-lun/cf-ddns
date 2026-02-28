@@ -1,4 +1,4 @@
-name = "cf-ddns"
+name = "cfddns"
 main = "src/index.js"
 compatibility_date = "2025-11-17"
 compatibility_flags = ["nodejs_compat"]
